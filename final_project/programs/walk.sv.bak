@@ -1,0 +1,88 @@
+module walk(	input logic frame_clk, walk_left, walk_right,
+					output logic walk_left_1, walk_left_2, walk_right_1, walk_right_2);
+		  
+enum logic [2:0] {stop, leftwalk1, leftwalk2, rightwalk1, rightwalk2, stop2} state, next_state;		
+logic [4:0] counter; 
+
+always_ff @(posedge frame_clk) begin
+	state <= next_state;
+	if(counter == 5'd10) 
+		counter <= 5'b0;
+	else 
+		counter <= counter + 1'b1;
+	end
+	
+always_comb 
+	begin
+	next_state = state;
+		case(state) 
+		stop:
+			if(counter == 5'd9 && walk_left)
+			next_state = leftwalk1;
+			else if(counter == 5'd9 && walk_right)
+			next_state = rightwalk1;
+			else
+			next_state = stop;
+		leftwalk1:
+			if(counter == 5'd9)
+			next_state = leftwalk2;
+			else
+			next_state = leftwalk1;
+		leftwalk2:
+			if(counter == 5'd9)
+			next_state = stop2;
+			else
+			next_state = leftwalk2;
+		rightwalk1:
+			if(counter == 5'd9)
+			next_state = rightwalk2;
+			else
+			next_state = rightwalk1;
+		rightwalk2:
+			if(counter == 5'd9)
+			next_state = stop2;
+			else
+			next_state = rightwalk2;
+		stop2:
+			next_state = stop;
+		endcase
+	end
+
+always_comb 
+	begin
+	data = data;
+	fight_1 = fight_1;
+	fight_valid = fight_valid;
+
+		case(state) 
+		
+		stand: begin
+			data = ROM[addr][0:99];
+			fight_1 = 1'b0;
+			fight_valid = 1'b0;
+				end
+
+		fight1:	begin
+			data = ROM1[addr][0:99];
+			fight_1 =1'b1;
+			fight_valid = 1'b0;
+			end
+
+		fight2:	begin
+			data = ROM2[addr][0:99];
+			fight_1 =1'b1;
+			fight_valid = 1'b1;
+					end
+		Wait: begin
+			data = ROM[addr][0:99];
+			fight_1 = 1'b0;
+			fight_valid = 1'b0;
+				end
+
+		endcase
+	end
+
+	
+	
+
+endmodule 

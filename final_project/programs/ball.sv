@@ -1,0 +1,254 @@
+//-------------------------------------------------------------------------
+//    Ball.sv                                                            --
+//    Viral Mehta                                                        --
+//    Spring 2005                                                        --
+//                                                                       --
+//    Modified by Stephen Kempf 03-01-2006                               --
+//                              03-12-2007                               --
+//    Translated by Joe Meng    07-07-2013                               --
+//    Modified by Po-Han Huang  12-08-2017                               --
+//    Spring 2018 Distribution                                           --
+//                                                                       --
+//    For use with ECE 385 Lab 8                                         --
+//    UIUC ECE Department                                                --
+//-------------------------------------------------------------------------
+
+
+module  ball ( input         Clk,                // 50 MHz clock
+                             Reset,              // Active-high reset signal
+                             frame_clk,          // The clock indicating a new frame (~60Hz)
+               input [9:0]   DrawX, DrawY,       // Current pixel coordinates
+					input [31:0]	  keycode,            //newly added keypress code
+               output logic  is_ball, jump_out,            // Whether current pixel belongs to ball or background
+					output logic [4:0] kirby_action, counter_out,
+					output logic[9:0]  Ball_X_Pos, Ball_Y_Pos
+              );
+    
+    parameter [9:0] Ball_X_Center = 10'd100;  // Center position on the X axis
+    parameter [9:0] Ball_Y_Center = 10'd390;  // Center position on the Y axis
+    parameter [9:0] Ball_X_Min = 10'd0;       // Leftmost point on the X axis
+    parameter [9:0] Ball_X_Max = 10'd639;     // Rightmost point on the X axis
+    parameter [9:0] Ball_Y_Min = 10'd0;       // Topmost point on the Y axis
+    parameter [9:0] Ball_Y_Max = 10'd400;     // Bottommost point on the Y axis
+    parameter [9:0] Ball_X_Step = 10'd2;      // Step size on the X axis
+    parameter [9:0] Ball_Y_Step = 10'd2;      // Step size on the Y axis
+    parameter [9:0] Ball_Size = 10'd12;        // Ball size
+	 parameter [9:0] kirby_size = 10'd16;			 // kirby diameter 36
+
+	 
+    logic [9:0] Ball_X_Motion, Ball_Y_Motion;
+    logic [9:0] Ball_X_Pos_in, Ball_X_Motion_in, Ball_Y_Pos_in, Ball_Y_Motion_in;
+	 logic jump, jump_left, jump_right, walk_left, walk_right, stop, walk_left_1, walk_left_2, 
+	 walk_right_1, walk_right_2, midjump_1, leftjump_1, leftjump_2, rightjump_1, rightjump_2, sleep_1, suck_left, suck_right;
+	 
+	 assign jump_out = jump;
+	 gravity gravitymodule(.*); //gravity controls the Ball Y position
+	 walk walkmodule(.*, .ground(stop));
+    //////// Do not modify the always_ff blocks. ////////
+    // Detect rising edge of frame_clk
+    logic frame_clk_delayed, frame_clk_rising_edge;
+    always_ff @ (posedge Clk) begin
+        frame_clk_delayed <= frame_clk;
+        frame_clk_rising_edge <= (frame_clk == 1'b1) && (frame_clk_delayed == 1'b0);
+    end
+	 
+    // Update registers
+    always_ff @ (posedge Clk)
+    begin
+        if (Reset)
+        begin
+            Ball_X_Pos <= Ball_X_Center;
+            Ball_Y_Pos <= Ball_Y_Center;
+            Ball_X_Motion <= 10'd0;
+            Ball_Y_Motion <= Ball_Y_Step;
+        end
+        else
+        begin
+            Ball_X_Pos <= Ball_X_Pos_in;
+            Ball_Y_Pos <= Ball_Y_Pos_in;
+            Ball_X_Motion <= Ball_X_Motion_in;
+            Ball_Y_Motion <= Ball_Y_Motion_in;
+        end
+    end
+    //////// Do not modify the always_ff blocks. ////////
+    
+    // You need to modify always_comb block.
+    always_comb
+    begin
+        // By default, keep motion and position unchanged
+        Ball_X_Pos_in = Ball_X_Pos;
+        Ball_Y_Pos_in = Ball_Y_Pos;
+        Ball_X_Motion_in = Ball_X_Motion;
+		  jump = 1'b0;
+		  jump_left = 1'b0;
+		  jump_right = 1'b0;
+		  walk_left = 1'b0;
+		  walk_right = 1'b0;	
+		  suck_left = 1'b0;
+		  suck_right = 1'b0;
+        
+        // Update position and motion only at rising edge of frame clock
+        if (frame_clk_rising_edge)
+        begin
+		      unique case(keycode[15:0])
+					16'h001A:  // w (up)
+						begin
+							 jump = 1'b1;
+							 Ball_X_Motion_in = 1'b0;
+						end
+					16'h0004:	//A(left)
+						begin
+						    Ball_X_Motion_in = (~(Ball_X_Step) + 1'b1);
+							 walk_left = 1'b1;
+					   end
+					16'h0007: //D(right)
+						begin
+							Ball_X_Motion_in = Ball_X_Step;
+							walk_right = 1'b1;
+						end
+					16'h0016://S(down)
+						begin
+							Ball_X_Motion_in = 1'b0;
+						end
+					16'h041a:  // w (up) + A (left) left jump
+						begin
+						    jump = 1'b1;
+							 Ball_X_Motion_in = (~(Ball_X_Step) + 1'b1);
+							 jump_left = 1'b1;
+						end
+					16'h1a04:  // w (up) + A (left) left jump
+						begin
+						    jump = 1'b1;
+							 Ball_X_Motion_in = (~(Ball_X_Step) + 1'b1);
+							 jump_left = 1'b1;
+						end
+					16'h071a:  // w (up) + D (right) right jump
+						begin
+							 jump = 1'b1;
+							 Ball_X_Motion_in = Ball_X_Step;	
+							 jump_right = 1'b1;
+						end
+					16'h1a07:  // w (up) + D (right) right jump
+						begin
+							 jump = 1'b1;
+							 Ball_X_Motion_in = Ball_X_Step;	
+							 jump_right = 1'b1;
+						end
+					16'h000d:  // just suck
+						begin
+							 suck_left = 1'b1;
+							 walk_left = 1'b0;
+							 Ball_X_Motion_in = 1'b0;
+						end
+					16'h040d: //left suck
+						begin
+							 suck_left = 1'b1;
+							 walk_left = 1'b0;
+							 Ball_X_Motion_in = 1'b0;
+						end
+					16'h0d04:
+						begin
+							 suck_left = 1'b1;
+							 walk_left = 1'b0;
+							 Ball_X_Motion_in = 1'b0;
+						end
+					16'h070d:  //right suck
+						begin
+							 suck_right = 1'b1;
+							 walk_right = 1'b0;
+							 Ball_X_Motion_in = 1'b0;
+						end
+					16'h0d07:
+						begin
+							 suck_right = 1'b1;
+							 walk_right = 1'b0;
+							 Ball_X_Motion_in = 1'b0;
+						end
+					default:
+						begin
+							Ball_X_Motion_in = 1'b0;
+						end
+				endcase
+				
+            // Be careful when using comparators with "logic" datatype because compiler treats 
+            //   both sides of the operator as UNSIGNED numbers.
+            // e.g. Ball_Y_Pos - Ball_Size <= Ball_Y_Min 
+            // If Ball_Y_Pos is 0, then Ball_Y_Pos - Ball_Size will not be -4, but rather a large positive number.
+            
+            // TODO: Add other boundary detections and handle keypress here.
+				
+				if( Ball_X_Pos + Ball_Size >= Ball_X_Max )  // Ball is at the right edge, BOUNCE!
+					 begin
+							Ball_X_Motion_in = (~(Ball_X_Step) + 1'b1);  // 2's complement.  
+							//Ball_Y_Motion_in = 1'b0;
+					 end
+            else if ( Ball_X_Pos <= Ball_X_Min + Ball_Size )  // Ball is at the left edge, BOUNCE!
+					 begin
+							Ball_X_Motion_in = Ball_X_Step;
+							//Ball_Y_Motion_in = 1'b0;
+					 end
+        	     
+            // Update the ball's position with its motion
+            Ball_X_Pos_in = Ball_X_Pos + Ball_X_Motion;
+            Ball_Y_Pos_in = Ball_Y_Pos + Ball_Y_Motion;
+        end
+        
+        /**************************************************************************************
+            ATTENTION! Please answer the following quesiton in your lab report! Points will be allocated for the answers!
+            Hidden Question #2/2:
+               Notice that Ball_Y_Pos is updated using Ball_Y_Motion. 
+              Will the new value of Ball_Y_Motion be used when Ball_Y_Pos is updated, or the old? 
+              What is the difference between writing
+                "Ball_Y_Pos_in = Ball_Y_Pos + Ball_Y_Motion;" and 
+                "Ball_Y_Pos_in = Ball_Y_Pos + Ball_Y_Motion_in;"?
+              How will this impact behavior of the ball during a bounce, and how might that interact with a response to a keypress?
+              Give an answer in your Post-Lab.
+        **************************************************************************************/
+    end
+    
+    // Compute whether the pixel corresponds to ball or background
+    /* Since the multiplicants are required to be signed, we have to first cast them
+       from logic to int (signed by default) before they are multiplied. */
+    int DistX, DistY, Size;
+    assign DistX = DrawX - Ball_X_Pos;
+    assign DistY = DrawY - Ball_Y_Pos;
+    assign Size = kirby_size;
+    
+	 always_comb begin
+        if ( ( DistX*DistX + DistY*DistY) <= (Size*Size) ) 
+            is_ball = 1'b1;
+        else
+            is_ball = 1'b0;
+    end
+
+	 //kirby's action
+	 always_comb begin
+		  if(midjump_1)
+				kirby_action = 5'b00111;
+		  else if(walk_left_1)
+				kirby_action = 5'b00001;
+		  else if(walk_left_2)
+		      kirby_action = 5'b00010;
+		  else if(walk_right_1)
+			   kirby_action = 5'b00011;
+		  else if(walk_right_2)
+		      kirby_action = 5'b00100;
+		  else if(leftjump_1)
+				kirby_action = 5'b00101;
+		  else if(leftjump_2)
+				kirby_action = 5'b01101;
+		  else if(rightjump_1)
+				kirby_action = 5'b00110;
+		  else if(rightjump_2)
+				kirby_action = 5'b01110;
+		  else if(sleep_1)
+				kirby_action = 5'b01000;
+		  else if(suck_left)
+				kirby_action = 5'b01001;
+		  else if(suck_right)
+				kirby_action = 5'b01010;
+		  else
+				kirby_action = 5'b00000;
+	 end
+    
+endmodule
